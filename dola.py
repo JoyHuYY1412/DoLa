@@ -7,7 +7,7 @@ import json
 
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM, LlamaTokenizer
 from transformers.generation.stopping_criteria import StoppingCriteriaList, LLamaQaStoppingCriteria
 
 import argparse
@@ -27,7 +27,7 @@ class DoLa:
 
     def load_model(self, model_name):
         if self.device == "cuda":
-            kwargs = {"torch_dtype": torch.float16, "offload_folder": f"{model_name}/offload"}
+            kwargs = {"torch_dtype": torch.float32, "offload_folder": f"{model_name}/offload"}
             if self.num_gpus == "auto":
                 kwargs["device_map"] = "auto"
             else:
@@ -42,9 +42,11 @@ class DoLa:
         else:
             raise ValueError(f"Invalid device: {self.device}")
         
-        tokenizer = AutoTokenizer.from_pretrained(model_name if not 'vicuna' in model_name else 'huggyllama/llama-7b')
-        model = AutoModelForCausalLM.from_pretrained(model_name,
-            low_cpu_mem_usage=True, **kwargs)
+        # tokenizer = AutoTokenizer.from_pretrained(model_name if not 'vicuna' in model_name else 'huggyllama/llama-7b')
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = LlamaForCausalLM.from_pretrained(model_name, **kwargs)
+        # model = AutoModelForCausalLM.from_pretrained(model_name,
+            # low_cpu_mem_usage=True, **kwargs)
 
         if self.device == "cuda" and self.num_gpus == 1:
             model.cuda()
@@ -187,10 +189,19 @@ class DoLa:
                     # 4. Calculate log-softmax for the KL divergence
                     log_softmax_mature_layer = F.log_softmax(dict_outputs[mature_layer][:, seq_i, :], dim=-1)  # shape: (batch_size, num_features)
                     log_softmax_premature_layers = F.log_softmax(stacked_premature_layers, dim=-1)  # shape: (num_premature_layers, batch_size, num_features)
+                    '''
+                    M = 0.5 * (F.softmax(dict_outputs[mature_layer][:, seq_i, [29909, 29933, 29907, 29928]], dim=-1)[None, :, :] + F.softmax(stacked_premature_layers[:,:,[29909, 29933, 29907, 29928]], dim=-1))  # shape: (num_premature_layers, batch_size, num_features)
 
+                    log_softmax_mature_layer = F.log_softmax(dict_outputs[mature_layer][:, seq_i, [29909, 29933, 29907, 29928]], dim=-1)  # shape: (batch_size, num_features)
+                    log_softmax_premature_layers = F.log_softmax(stacked_premature_layers[:,:,[29909, 29933, 29907, 29928]], dim=-1)  # shape: (num_premature_layers, batch_size, num_features)
+                    '''
                     # 5. Calculate the KL divergences and then the JS divergences
                     kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction='none').mean(-1)  # shape: (num_premature_layers, batch_size)
                     kl2 = F.kl_div(log_softmax_premature_layers, M, reduction='none').mean(-1)  # shape: (num_premature_layers, batch_size)
+                    
+                    # kl1 = F.kl_div(log_softmax_mature_layer[None, :, [29909, 29933, 29907, 29928]], M[:,:, [29909, 29933, 29907, 29928]], reduction='none').mean(-1)  # shape: (num_premature_layers, batch_size)
+                    # kl2 = F.kl_div(log_softmax_premature_layers[:,:, [29909, 29933, 29907, 29928]], M[:,:, [29909, 29933, 29907, 29928]], reduction='none').mean(-1)  # shape: (num_premature_layers, batch_size)
+
                     js_divs = 0.5 * (kl1 + kl2)  # shape: (num_premature_layers, batch_size)
 
                     # 6. Reduce the batchmean

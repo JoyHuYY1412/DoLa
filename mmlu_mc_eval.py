@@ -252,7 +252,6 @@ if __name__ == "__main__":
     val_file = os.path.join(os.path.join(args.data_path, 'val'), val_filename)
 
     list_data_dict = MultipleChoiceDataset(args.subject, test_file, val_file)
-    import pdb; pdb.set_trace()
 
     # fp = os.path.join(args.data_path, 'TruthfulQA.csv')
     # if not os.path.exists(fp):
@@ -296,15 +295,14 @@ if __name__ == "__main__":
     result_dict = {'question': [], 'model_scores': [], 'total_mc1': 0.0, 'total_mc2': 0.0, 'total_mc3': 0.0}
     with torch.no_grad():
         for sample in tqdm(list_data_dict):
-            import pdb; pdb.set_trace()
 
             # currently the answer only contains A,B,C,D
             answer_set = {"A", "B", "C", "D"}
             # reference answers
-            ref_best = sample['label']
+            ref_best = sample['label'][0]
             ref_true = sample['label']
-            ref_false = split_multi_answer(",".join(answer_set-{sample['label']}))
 
+            ref_false = split_multi_answer(";".join(answer_set-set(sample['label'])), close=False)
             scores_true = []
             scores_false = []
 
@@ -312,8 +310,10 @@ if __name__ == "__main__":
 
             for temp_ans in ref_true:
                 # append the current answer choice to the prompt
-                prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
+                # prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
+                prompt, answer = sample["question"], temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
+                print(log_probs)
                 scores_true.append(log_probs)
 
                 if mode == "dola":
@@ -322,8 +322,10 @@ if __name__ == "__main__":
 
             for temp_ans in ref_false:
                 # append the current answer choice to the prompt
-                prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
+                # prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
+                prompt, answer = sample["question"], temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
+                print(log_probs)
                 scores_false.append(log_probs)
 
                 if mode == "dola":
@@ -371,8 +373,9 @@ if __name__ == "__main__":
     # Print the final scores, separated by ', '
     print(f'Final MC1/2/3: \n{result_dict["total_mc1"]}, {result_dict["total_mc2"]}, {result_dict["total_mc3"]}')
 
-    result_dict['premature_layer_dist_correct'] = premature_layer_dist_correct
-    result_dict['premature_layer_dist_false'] = premature_layer_dist_false
+    if mode == "dola":
+        result_dict['premature_layer_dist_correct'] = premature_layer_dist_correct
+        result_dict['premature_layer_dist_false'] = premature_layer_dist_false
 
     # save results to a json file
     model_tag = model_name.split('/')[-1] if model_name[-1] != '/' else model_name.split('/')[-2]

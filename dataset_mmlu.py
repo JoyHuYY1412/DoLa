@@ -44,7 +44,7 @@ class MultipleChoiceDataset(Dataset):
         input_text += "Answer:"
         input_text = prompt_text + input_text
 
-        return {"question":input_text, "label": answer}
+        return {"question":input_text, "label": [answer]}
         # encodings = self.tokenizer(
         #     input_text,
         #     padding = "max_length",
