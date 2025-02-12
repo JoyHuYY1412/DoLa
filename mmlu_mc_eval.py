@@ -311,7 +311,7 @@ if __name__ == "__main__":
             for temp_ans in ref_true:
                 # append the current answer choice to the prompt
                 # prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
-                prompt, answer = sample["question"], temp_ans
+                prompt, answer = sample["question"], " " + temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
                 print(log_probs)
                 scores_true.append(log_probs)
@@ -323,15 +323,14 @@ if __name__ == "__main__":
             for temp_ans in ref_false:
                 # append the current answer choice to the prompt
                 # prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
-                prompt, answer = sample["question"], temp_ans
+                prompt, answer = sample["question"], " " + temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
-                print(log_probs)
+                print('false', log_probs)
                 scores_false.append(log_probs)
 
                 if mode == "dola":
                     for k, v in c_dist.items():
                         premature_layer_dist_false[k] += v
-            # import ipdb; ipdb.set_trace()
 
             scores = MC_calcs(scores_true, scores_false, ref_true, ref_best)
             # check nan in mc1/2/3
