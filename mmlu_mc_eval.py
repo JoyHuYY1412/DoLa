@@ -292,7 +292,7 @@ if __name__ == "__main__":
         premature_layer_dist_correct = {l:0 for l in candidate_premature_layers}
         premature_layer_dist_false = {l:0 for l in candidate_premature_layers}
     answers = []
-    result_dict = {'question': [], 'model_scores': [], 'total_mc1': 0.0, 'total_mc2': 0.0, 'total_mc3': 0.0}
+    result_dict = {'question': [], 'model_scores': [], 'total_mc1': 0.0, 'total_mc2': 0.0, 'total_mc3': 0.0, 'logits': []}
     with torch.no_grad():
         for sample in tqdm(list_data_dict):
 
@@ -314,10 +314,11 @@ if __name__ == "__main__":
                 prompt, answer = sample["question"], temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
                 print(log_probs)
+                result_dict['logits'].append(c_dist[1].tolist())
                 scores_true.append(log_probs)
 
                 if mode == "dola":
-                    for k, v in c_dist.items():
+                    for k, v in c_dist[0].items():
                         premature_layer_dist_correct[k] += v
 
             for temp_ans in ref_false:
@@ -329,7 +330,7 @@ if __name__ == "__main__":
                 scores_false.append(log_probs)
 
                 if mode == "dola":
-                    for k, v in c_dist.items():
+                    for k, v in c_dist[0].items():
                         premature_layer_dist_false[k] += v
             # import ipdb; ipdb.set_trace()
 

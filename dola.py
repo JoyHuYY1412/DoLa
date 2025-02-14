@@ -165,7 +165,6 @@ class DoLa:
                 picked_logits = []
                 result_dict = {}
                 premature_layers = []
-
                 dict_outputs, outputs = self.model(
                     input_ids=input_ids,
                     return_dict=True,
@@ -178,7 +177,7 @@ class DoLa:
                     # Pick the less like layer to contrast with
                     # 1. Stacking all premature_layers into a new dimension
                     stacked_premature_layers = torch.stack([dict_outputs[i][:, seq_i, :] for i in candidate_premature_layers], dim=0)
-
+                    all_stacked_premature_layers = torch.stack([dict_outputs[i][:, seq_i, :] for i in candidate_premature_layers + [mature_layer]], dim=0)
                     # 2. Calculate the softmax values for mature_layer and all premature_layers
                     softmax_mature_layer = F.softmax(dict_outputs[mature_layer][:, seq_i, :], dim=-1)  # shape: (batch_size, num_features)
                     softmax_premature_layers = F.softmax(stacked_premature_layers, dim=-1)  # shape: (num_premature_layers, batch_size, num_features)
@@ -213,7 +212,7 @@ class DoLa:
 
                 base_logits = torch.zeros_like(dict_outputs[mature_layer][0, prefix_ids.shape[-1] - 1:-1])
                 for i, l in enumerate(premature_layers):
-                   base_logits[i] = dict_outputs[l][0, prefix_ids.shape[-1] - 1 + i]
+                    base_logits[i] = dict_outputs[l][0, prefix_ids.shape[-1] - 1 + i]
                 final_logits = dict_outputs[mature_layer][0, prefix_ids.shape[-1] - 1:-1]
                 final_logits = final_logits.log_softmax(dim=-1)
                 base_logits = base_logits.log_softmax(dim=-1)
@@ -227,4 +226,4 @@ class DoLa:
                 
                 log_probs = diff_logits[range(diff_logits.shape[0]), continue_ids].sum().item()
 
-        return log_probs, (premature_layer_dist if mode == 'dola' else None)
+        return log_probs, ((premature_layer_dist, all_stacked_premature_layers) if mode == 'dola' else None)
