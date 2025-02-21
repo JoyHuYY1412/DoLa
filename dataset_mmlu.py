@@ -26,7 +26,7 @@ class MultipleChoiceDataset(Dataset):
             for i, choice in enumerate(choices):
                 example_text += f"{self.choices[i]}. {choice}\n"
             example_text += "Answer:"
-            example_text += f"{answer}\n\n"
+            example_text += " " + f"{answer}\n\n"
         return example_text
 
     def __getitem__(self, idx):
