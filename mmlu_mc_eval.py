@@ -238,6 +238,7 @@ if __name__ == "__main__":
     parser.add_argument("--relative_top", type=float, default=0.0)
     parser.add_argument("--relative_top_value", type=float, default=-1000.0)
     parser.add_argument("--subject", type=str, default=None)
+    parser.add_argument("--mode", type=str, default=None)
 
     args = parser.parse_args()
     model_name = args.model_name
@@ -271,26 +272,34 @@ if __name__ == "__main__":
     stop_word_list = ["Q:"]
     llm.set_stop_words(stop_word_list)
     early_exit_layers = [int(x) for x in args.early_exit_layers.split(',')]
-    if len(early_exit_layers) == 1:
-        print("MODE: naive decoding from the last layer", flush=True)
-        mode = "baseline"
-        mature_layer = None
-        premature_layer = None
-        candidate_premature_layers = None
-    elif len(early_exit_layers) == 2:
-        print(f"MODE: DoLa-static decoding with mature layer: {early_exit_layers[1]} and premature layer: {early_exit_layers[0]}")
-        mode = "dola-static"
+    if args.mode == None:
+        if len(early_exit_layers) == 1:
+            print("MODE: naive decoding from the last layer", flush=True)
+            mode = "baseline"
+            mature_layer = None
+            premature_layer = None
+            candidate_premature_layers = None
+        elif len(early_exit_layers) == 2:
+            print(f"MODE: DoLa-static decoding with mature layer: {early_exit_layers[1]} and premature layer: {early_exit_layers[0]}")
+            mode = "dola-static"
+            mature_layer = early_exit_layers[1]
+            premature_layer = early_exit_layers[0]
+            candidate_premature_layers = None
+        else:
+            print(f"MODE: DoLa decoding with mature layer: {early_exit_layers[-1]} and premature layers: {early_exit_layers[:-1]}")
+            mode = "dola"
+            mature_layer = early_exit_layers[-1]
+            premature_layer = None
+            candidate_premature_layers = early_exit_layers[:-1]
+            premature_layer_dist_correct = {l:0 for l in candidate_premature_layers}
+            premature_layer_dist_false = {l:0 for l in candidate_premature_layers}
+    else:
+        mode = args.mode
+        print(f"MODE: Our DoLa-static decoding with mature layer: {early_exit_layers[1]} and premature layer: {early_exit_layers[0]}")
         mature_layer = early_exit_layers[1]
         premature_layer = early_exit_layers[0]
         candidate_premature_layers = None
-    else:
-        print(f"MODE: DoLa decoding with mature layer: {early_exit_layers[-1]} and premature layers: {early_exit_layers[:-1]}")
-        mode = "dola"
-        mature_layer = early_exit_layers[-1]
-        premature_layer = None
-        candidate_premature_layers = early_exit_layers[:-1]
-        premature_layer_dist_correct = {l:0 for l in candidate_premature_layers}
-        premature_layer_dist_false = {l:0 for l in candidate_premature_layers}
+        
     answers = []
     result_dict = {'question': [], 'model_scores': [], 'total_mc1': 0.0, 'total_mc2': 0.0, 'total_mc3': 0.0, 'logits': []}
     with torch.no_grad():
@@ -313,11 +322,11 @@ if __name__ == "__main__":
                 # prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
                 prompt, answer = sample["question"], temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
-                print(log_probs)
-                result_dict['logits'].append(c_dist[1].tolist())
+                print(answer, log_probs)
+                
                 scores_true.append(log_probs)
-
                 if mode == "dola":
+                    result_dict['logits'].append(c_dist[1].tolist())
                     for k, v in c_dist[0].items():
                         premature_layer_dist_correct[k] += v
 
@@ -326,7 +335,7 @@ if __name__ == "__main__":
                 # prompt, answer = build_prompt_and_answer(sample['question'], temp_ans)
                 prompt, answer = sample["question"], temp_ans
                 log_probs, c_dist = llm.lm_score(prompt, answer, **generate_kwargs)
-                print(log_probs)
+                print(answer, log_probs)
                 scores_false.append(log_probs)
 
                 if mode == "dola":

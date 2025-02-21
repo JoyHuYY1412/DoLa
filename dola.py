@@ -73,7 +73,7 @@ class DoLa:
                 outputs = self.model.generate(input_ids, max_length=max_len, num_return_sequences=1,
                                     output_scores=True, return_dict_in_generate=True, dola_decoding=False,
                                     top_p=top_p, top_k=top_k, temperature=temperature, stopping_criteria=self.stopping_criteria, **kwargs)
-            elif mode == 'dola-static':
+            elif mode == 'dola-static' or mode == 'our-dola-static':
                 assert mature_layer is not None, "mature_layer must be specified"
                 assert premature_layer is not None, "premature_layer must be specified"
                 outputs = self.model.generate(input_ids, max_length=max_len, num_return_sequences=1,
@@ -152,6 +152,29 @@ class DoLa:
                 final_logits = final_logits.log_softmax(dim=-1)
                 base_logits = base_logits.log_softmax(dim=-1)
                 diff_logits = final_logits - base_logits
+                if post_softmax:
+                    diff_logits = diff_logits.log_softmax(dim=-1)
+                if relative_top > 0.0:
+                    relative_top_mask = self.get_relative_top_filter(final_logits, relative_top)
+                    diff_logits = torch.where(relative_top_mask, relative_top_value, diff_logits)
+                    
+                log_probs = diff_logits[range(diff_logits.shape[0]), continue_ids].sum().item()
+
+            elif mode == 'our-dola-static':
+                dict_outputs, outputs = self.model(
+                    input_ids=input_ids,
+                    return_dict=True,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                    early_exit_layers=[premature_layer, mature_layer],
+                )
+
+                assert premature_layer is not None
+                base_logits = dict_outputs[premature_layer][0, prefix_ids.shape[-1] - 1: -1, :]
+                final_logits = dict_outputs[mature_layer][0, prefix_ids.shape[-1] - 1: -1, :]
+                final_logits = final_logits.softmax(dim=-1)
+                base_logits = base_logits.softmax(dim=-1)
+                diff_logits = 2*final_logits - base_logits
                 if post_softmax:
                     diff_logits = diff_logits.log_softmax(dim=-1)
                 if relative_top > 0.0:
